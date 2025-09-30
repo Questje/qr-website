@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Chart Viewer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎵 Questje's ReQuestje's - All Charts! 🎵 </h1>
+            <div class="controls">
+                <button id="prevChart" class="nav-button">
+                    ← PREVIOUS
+                </button>
+                
+                <div class="chart-selector-group">
+                    <label for="chartSelector">Select Chart:</label>
+                    <select id="chartSelector">
+                        {% if has_data %}
+                            <option value="0">All Songs</option>
+                            {% for i in range(1, num_charts + 1) %}
+                                <option value="{{ i }}" {% if i == num_charts %}selected{% endif %}>
+                                    Chart {{ i }}
+                                </option>
+                            {% endfor %}
+                        {% else %}
+                            <option value="0">No Data Available</option>
+                        {% endif %}
+                    </select>
+                </div>
+                
+                <button id="nextChart" class="nav-button">
+                    NEXT →
+                </button>
+                
+                <span id="loadingIndicator" class="loading-hidden">Loading...</span>
+            </div>
+        </header>
+
+        <main>
+            {% if has_data %}
+                <h2>
+                  Questje's ReQuestje's #<span id="currentChart"></span>
+                </h2>
+                <div class="chart-legend" id="chartLegend">
+                    <span class="legend-item"><span class="legend-color new"></span> New Entry <span class="count" id="countNew">(0)</span></span>
+                    <span class="legend-item"><span class="legend-color riser"></span> Riser <span class="count" id="countRiser">(0)</span></span>
+                    <span class="legend-item"><span class="legend-color same"></span> No Change <span class="count" id="countSame">(0)</span></span>
+                    <span class="legend-item"><span class="legend-color faller"></span> Faller <span class="count" id="countFaller">(0)</span></span>
+                    <span class="legend-item"><span class="legend-color reentry"></span> Re-entry <span class="count" id="countReentry">(0)</span></span>
+                </div>
+                
+                <table id="chartTable">
+                    <thead>
+                        <tr>
+                            <th data-column="position" class="sortable compact-column">
+                                Pos <span class="sort-arrow">↕</span>
+                            </th>
+                            <th data-column="prev_position" class="sortable compact-column">
+                                Prev <span class="sort-arrow">↕</span>
+                            </th>
+                            <th data-column="title" class="sortable">
+                                Song Title <span class="sort-arrow">↕</span>
+                            </th>
+                            <th data-column="total_charts" class="sortable charts-column">
+                                Charts <span class="sort-arrow">↕</span>
+                            </th>
+                            <th data-column="total_points" class="sortable points-column">
+                                Total Points <span class="sort-arrow">↕</span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="chartBody">
+                        <!-- Data will be loaded here via JavaScript -->
+                    </tbody>
+                </table>
+            {% else %}
+                <div class="error-message">
+                    <h2>⚠️ No Data Available</h2>
+                    <p>Please ensure the Chart.xlsx file is in the correct location and properly formatted.</p>
+                </div>
+            {% endif %}
+        </main>
+
+        <footer>
+            <p>Questje's ReQuestje's Chart Viewer © 2025 | <span id="songCount"></span> total songs across <span id="chartCount"></span> charts</p>
+        </footer>
+    </div>
+
+    <script>
+        let currentData = [];
+        let currentSortColumn = 'position';
+        let currentSortDirection = 'asc';
+        let currentChartNumber = {{ num_charts if has_data else 1 }};
+        const maxCharts = {{ num_charts if has_data else 1 }};
+
+        // Load chart data
+        async function loadChart(chartNumber) {
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            loadingIndicator.classList.remove('loading-hidden');
+            
+            try {
+                const response = await fetch(`/api/chart/${chartNumber}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Error loading chart:', data.error);
+                    return;
+                }
+                
+                currentData = data.data;
+                currentChartNumber = chartNumber;
+                currentSortColumn = 'position';
+                currentSortDirection = 'asc';
+                document.getElementById('currentChart').textContent = data.chart_number;
+
+                // Update selector
+                document.getElementById('chartSelector').value = currentChartNumber;
+                
+                // Update button states
+                updateNavigationButtons();
+                
+                // Update legend counts
+                updateLegendCounts(data.movement_counts);
+                
+                // Show/hide legend based on chart type
+                document.getElementById('chartLegend').style.display = 
+                    chartNumber === 0 ? 'none' : 'flex';
+                
+                renderTable();
+            } catch (error) {
+                console.error('Failed to load chart:', error);
+            } finally {
+                loadingIndicator.classList.add('loading-hidden');
+            }
+        }
+
+        // Update legend counts
+        function updateLegendCounts(counts) {
+            if (counts) {
+                document.getElementById('countNew').textContent = `(${counts.new || 0})`;
+                document.getElementById('countRiser').textContent = `(${counts.riser || 0})`;
+                document.getElementById('countSame').textContent = `(${counts.same || 0})`;
+                document.getElementById('countFaller').textContent = `(${counts.faller || 0})`;
+                document.getElementById('countReentry').textContent = `(${counts.reentry || 0})`;
+            }
+        }
+
+        // Update navigation button states
+        function updateNavigationButtons() {
+            document.getElementById('prevChart').disabled = currentChartNumber <= 0;
+            document.getElementById('nextChart').disabled = currentChartNumber >= maxCharts;
+        }
+
+        // Navigate to previous/next chart
+        function navigateChart(direction) {
+            const newChartNumber = currentChartNumber + direction;
+            if (newChartNumber >= 0 && newChartNumber <= maxCharts) {
+                loadChart(newChartNumber);
+            }
+        }
+
+        // Format song title with #1 label
+        function formatSongTitle(title, numberOnes) {
+            if (numberOnes > 0) {
+                return `${title} <span class="number-one-label">${numberOnes}x #1</span>`;
+            }
+            return title;
+        }
+
+        // Render table with current data
+        function renderTable() {
+            const tbody = document.getElementById('chartBody');
+            tbody.innerHTML = '';
+            
+            const isAllSongs = currentChartNumber === 0;
+            
+            currentData.forEach((row, index) => {
+                const tr = document.createElement('tr');
+                
+                // Determine position box class based on movement type
+                let positionClass = 'position-number';
+                let movementIcon = '';
+                
+                if (!isAllSongs) {
+                    switch(row.movement_type) {
+                        case 'new':
+                            positionClass += ' new-entry';
+                            movementIcon = '<span class="movement-icon">★</span>';
+                            break;
+                        case 'reentry':
+                            positionClass += ' reentry';
+                            movementIcon = '<span class="movement-icon">↺</span>';
+                            break;
+                        case 'riser':
+                            positionClass += ' riser';
+                            movementIcon = '<span class="movement-icon">↑</span>';
+                            break;
+                        case 'faller':
+                            positionClass += ' faller';
+                            movementIcon = '<span class="movement-icon">↓</span>';
+                            break;
+                        case 'same':
+                            positionClass += ' same';
+                            movementIcon = '<span class="movement-icon">→</span>';
+                            break;
+                    }
+                } else {
+                    // For "All Songs" view, color by ranking
+                    if (row.position <= 3) {
+                        positionClass += ' top-three';
+                    } else if (row.position <= 10) {
+                        positionClass += ' top-ten';
+                    } else {
+                        positionClass += ' same';
+                    }
+                }
+                
+                tr.innerHTML = `
+                    <td class="position-cell compact-cell">
+                        <div class="position-wrapper">
+                            <span class="${positionClass}">${row.position}</span>
+                            ${movementIcon}
+                        </div>
+                    </td>
+                    <td class="prev-position-cell compact-cell">${row.prev_position}</td>
+                    <td class="title-cell">${formatSongTitle(row.title, row.number_ones)}</td>
+                    <td class="charts-cell">${row.total_charts}</td>
+                    <td class="points-cell">${row.total_points}</td>
+                `;
+                
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Sort table
+        function sortTable(column) {
+            if (currentSortColumn === column) {
+                currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSortColumn = column;
+                currentSortDirection = column === 'total_points' ? 'desc' : 'asc';
+            }
+            
+            currentData.sort((a, b) => {
+                let aVal = a[column];
+                let bVal = b[column];
+                
+                // Handle special cases
+                if (column === 'prev_position') {
+                    aVal = aVal === '--' ? 999 : parseInt(aVal);
+                    bVal = bVal === '--' ? 999 : parseInt(bVal);
+                }
+                
+                if (typeof aVal === 'string') {
+                    aVal = aVal.toLowerCase();
+                    bVal = bVal.toLowerCase();
+                }
+                
+                if (currentSortDirection === 'asc') {
+                    return aVal > bVal ? 1 : -1;
+                } else {
+                    return aVal < bVal ? 1 : -1;
+                }
+            });
+            
+            renderTable();
+            updateSortIndicators();
+        }
+
+        // Update sort indicators
+        function updateSortIndicators() {
+            document.querySelectorAll('th.sortable').forEach(th => {
+                const arrow = th.querySelector('.sort-arrow');
+                if (th.dataset.column === currentSortColumn) {
+                    arrow.textContent = currentSortDirection === 'asc' ? '↑' : '↓';
+                    th.classList.add('sorted');
+                } else {
+                    arrow.textContent = '↕';
+                    th.classList.remove('sorted');
+                }
+            });
+        }
+
+        // Load info
+        async function loadInfo() {
+            try {
+                const response = await fetch('/api/info');
+                const data = await response.json();
+                document.getElementById('songCount').textContent = data.num_songs;
+                document.getElementById('chartCount').textContent = data.num_charts;
+            } catch (error) {
+                console.error('Failed to load info:', error);
+            }
+        }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load initial data
+            {% if has_data %}
+                loadChart({{ num_charts }});
+                loadInfo();
+            {% endif %}
+            
+            // Chart selector
+            document.getElementById('chartSelector').addEventListener('change', (e) => {
+                loadChart(parseInt(e.target.value));
+            });
+            
+            // Navigation buttons
+            document.getElementById('prevChart').addEventListener('click', () => {
+                navigateChart(-1);
+            });
+            
+            document.getElementById('nextChart').addEventListener('click', () => {
+                navigateChart(1);
+            });
+            
+            // Keyboard navigation
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowLeft' && !e.target.matches('input, select, textarea')) {
+                    navigateChart(-1);
+                } else if (e.key === 'ArrowRight' && !e.target.matches('input, select, textarea')) {
+                    navigateChart(1);
+                }
+            });
+            
+            // Sort headers
+            document.querySelectorAll('th.sortable').forEach(th => {
+                th.addEventListener('click', () => {
+                    sortTable(th.dataset.column);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
