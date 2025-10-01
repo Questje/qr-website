@@ -189,7 +189,7 @@ def get_info():
 if __name__ == '__main__':
     print("\n🎵 Music Chart Website Generator")
     print("="*40)
-    print(f"🌐 Starting server at http://127.0.0.1:5000")
+    print(f"🌐 Starting server at http://127.0.0.1:5001")
     print("="*40 + "\n")
     
     #app.run(host='0.0.0.0', port=5000, debug=False)
