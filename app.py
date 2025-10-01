@@ -5,11 +5,20 @@ Main web server responsible for routing and serving the chart data
 from flask import Flask, render_template, jsonify, request
 from data_processor import ChartDataProcessor
 import os
+import sys
 
 app = Flask(__name__)
 
+# Get data file from command line argument or use default
+if len(sys.argv) > 1:
+    data_file = sys.argv[1]
+    print(f"📂 Using data file from argument: {data_file}")
+else:
+    data_file = "Chart.xlsx"
+    print(f"📂 Using default data file: {data_file}")
+
 # Initialize data processor
-processor = ChartDataProcessor()
+processor = ChartDataProcessor(data_file)
 
 # Load data on startup - check if we're in the reloader process
 if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
@@ -17,7 +26,7 @@ if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
     print(message)
     
     if not success:
-        print("⚠️  Warning: Starting server without data. Please fix the Excel file.")
+        print("⚠️  Warning: Starting server without data. Please fix the data file.")
 else:
     # In the reloader parent process, just set minimal values
     success = False
@@ -38,6 +47,11 @@ def count_number_ones(song_data):
         if position == 1:
             count += 1
     return count
+
+def get_top_spot(song_data):
+    """Get the best (lowest) position achieved by a song"""
+    positions = [pos for pos in song_data["positions"].values() if pos is not None]
+    return min(positions) if positions else None
 
 @app.route('/')
 def index():
@@ -69,7 +83,7 @@ def get_chart(chart_number):
         }
         
         for song in processor.songs:
-            # Use position from most recent chart (19) if available
+            # Use position from most recent chart if available
             latest_position = song["positions"].get(processor.num_charts)
             if latest_position is None:
                 # Find the most recent chart where this song appeared
@@ -84,6 +98,9 @@ def get_chart(chart_number):
             # Count #1 positions
             number_ones = count_number_ones(song)
             
+            # Get top spot
+            top_spot = get_top_spot(song)
+            
             formatted_data.append({
                 "position": latest_position if latest_position else 999,
                 "prev_position": "--",
@@ -92,7 +109,8 @@ def get_chart(chart_number):
                 "movement_type": "same",
                 "movement_value": 0,
                 "total_points": total_points,
-                "number_ones": number_ones
+                "number_ones": number_ones,
+                "top_spot": top_spot
             })
         
         # Sort by total points (descending)
@@ -123,11 +141,15 @@ def get_chart(chart_number):
     # Format data for frontend with additional metadata
     formatted_data = []
     for item in chart_data:
-        # Calculate total points and #1 count for this song
+        # Calculate total points, #1 count, and top spot for this song
+        total_points = 0
+        number_ones = 0
+        top_spot = None
         for song in processor.songs:
             if song["title"] == item["title"]:
                 total_points = calculate_total_points(song)
                 number_ones = count_number_ones(song)
+                top_spot = get_top_spot(song)
                 break
         
         # Determine movement type for coloring
@@ -168,13 +190,43 @@ def get_chart(chart_number):
             "movement_type": movement_type,
             "movement_value": movement_value,
             "total_points": total_points,
-            "number_ones": number_ones
+            "number_ones": number_ones,
+            "top_spot": top_spot
         })
     
     return jsonify({
         "chart_number": chart_number,
         "data": formatted_data,
         "movement_counts": movement_counts
+    })
+
+@app.route('/api/song-history/<path:song_title>')
+def get_song_history(song_title):
+    """
+    API endpoint to get the chart history for a specific song
+    """
+    if not success:
+        return jsonify({"error": "No data available"}), 500
+    
+    song_history = processor.get_song_history(song_title)
+    
+    if song_history is None:
+        return jsonify({"error": "Song not found"}), 404
+    
+    # Format the data for the chart
+    chart_data = []
+    for chart_num in range(1, processor.num_charts + 1):
+        position = song_history["positions"].get(chart_num)
+        if position is not None:
+            chart_data.append({
+                "chart": chart_num,
+                "position": position
+            })
+    
+    return jsonify({
+        "title": song_history["title"],
+        "chart_data": chart_data,
+        "total_charts": song_history["total_charts"]
     })
 
 @app.route('/api/info')
@@ -189,8 +241,16 @@ def get_info():
 if __name__ == '__main__':
     print("\n🎵 Music Chart Website Generator")
     print("="*40)
+    print(f"📂 Data file: {data_file}")
     print(f"🌐 Starting server at http://127.0.0.1:5001")
     print("="*40 + "\n")
     
-    #app.run(host='0.0.0.0', port=5000, debug=False)
-    app.run(port=5001, debug=True)
+    # Check if we should run in debug mode
+    debug_mode = '--debug' in sys.argv
+    
+    if debug_mode:
+        print("🔧 Running in DEBUG mode")
+        app.run(port=5001, debug=True)
+    else:
+        print("🚀 Running in PRODUCTION mode")
+        app.run(host='0.0.0.0', port=5001, debug=False)

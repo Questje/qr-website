@@ -85,7 +85,7 @@ h2 {
     font-size: 1rem;
     font-weight: bold;
     border: none;
-    border-radius: 8px;
+    border-radius: 12px;
     background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
     color: white;
     cursor: pointer;
@@ -122,11 +122,12 @@ h2 {
 .chart-legend {
     display: flex;
     justify-content: left;
-    gap: 20px;
-    padding: 12px;
+    gap: 10px;
+    padding: 8px;
     background: #f8f9fa;
     border-radius: 8px;
     margin-bottom: 15px;
+    margin-left: 0px;
     flex-wrap: wrap;
 }
 
@@ -192,7 +193,7 @@ main {
 }
 
 #chartTable th.compact-column {
-    width: 70px;
+    width: 90px;
     text-align: center;
 }
 
@@ -202,7 +203,7 @@ main {
 }
 
 #chartTable th.points-column {
-    width: 120px;
+    width: 140px;
     text-align: center;
 }
 
@@ -247,7 +248,7 @@ main {
 /* Compact cells */
 .compact-cell {
     text-align: center;
-    width: 70px;
+    width: 90px;
 }
 
 /* Position Cells */
@@ -471,4 +472,307 @@ footer span {
 
 #chartTable tbody tr {
     animation: fadeIn 0.2s ease;
+}
+/* Chart History Popup */
+.chart-history-popup {
+    position: absolute;
+    background: white;
+    border: 2px solid #3498db;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    padding: 15px;
+    min-width: 330px;
+    animation: popupFadeIn 0.2s ease;
+}
+
+@keyframes popupFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+#popupSongTitle {
+    font-weight: bold;
+    font-size: 14px;
+    color: #2c3e50;
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.close-popup {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: #999;
+    cursor: pointer;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    line-height: 18px;
+    text-align: center;
+    transition: color 0.2s ease;
+}
+
+.close-popup:hover {
+    color: #e74c3c;
+}
+
+#historyChart {
+    display: block;
+    background: #fafafa;
+    border-radius: 5px;
+}
+
+/* Hover effect for table rows */
+.chart-row {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.chart-row:hover {
+    background-color: rgba(52, 152, 219, 0.05);
+}
+
+/* Filter Controls */
+.filters-container {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.filter-group label {
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.song-filter-input {
+    padding: 8px 12px;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    width: 250px;
+    transition: all 0.3s ease;
+}
+
+.song-filter-input:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+}
+
+.clear-filter-btn {
+    padding: 8px 15px;
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.clear-filter-btn:hover {
+    background: #c0392b;
+    transform: translateY(-1px);
+}
+
+.filter-status {
+    background: #fff3cd;
+    border: 1px solid #ffeeba;
+    padding: 10px 15px;
+    border-radius: 6px;
+    color: #856404;
+    font-size: 14px;
+    display: none;
+}
+
+.filter-status .results-count {
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+/* Clickable Legend Items */
+.legend-item.clickable {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+    padding: 5px 5px;
+    border-radius: 6px;
+}
+
+.legend-item.clickable:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+.legend-item.active-filter {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: white;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+/* Top Spot Column */
+.top-spot-column {
+    width: 80px;
+}
+
+.top-spot-cell {
+    text-align: center;
+    font-weight: bold;
+    border-radius: 4px;
+    padding: 5px;
+}
+
+/* Adjust Song Title Column Width */
+.song-title-column {
+    width: 35%;
+    max-width: 350px;
+}
+
+/* No Results Message */
+.no-results {
+    text-align: center;
+    padding: 30px;
+    color: #999;
+    font-style: italic;
+    font-size: 16px;
+}
+
+/* Disable legend clicks in All Songs view */
+#chartLegend[style*="none"] + .legend-item.clickable {
+    cursor: default;
+}
+
+/* Table column adjustments for new Top Spot column */
+.title-cell {
+    max-width: 350px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Ensure filters container doesn't interfere with legend in All Songs view */
+.filters-container + h2 + #chartLegend[style*="display: none"] ~ table {
+    margin-top: 5px;
+}
+
+/* Visual feedback for filtered state */
+.chart-legend.has-active-filter {
+    background: rgba(52, 152, 219, 0.1);
+    padding: 12px;
+    border-radius: 8px;
+}
+
+/* Additional styling for better visual feedback */
+.legend-item.clickable {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+}
+
+/* Disabled state for legend in All Songs view */
+#chartLegend[style*="display: none"] ~ .filters-container {
+    margin-bottom: 10px;
+}
+
+/* Top spot special highlighting for #1 songs */
+.top-spot-cell:has-text("1") {
+    font-size: 16px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* Compact number columns */
+.compact-cell {
+    width: 90px !important;
+    max-width: 90px !important;
+    text-align: center;
+}
+
+.position-cell, .prev-position-cell {
+    width: 85px !important;
+    max-width: 85px !important;
+}
+
+.charts-cell {
+    width: 90px !important;
+    max-width: 90px !important;
+    text-align: center;
+}
+
+.top-spot-cell {
+    width: 100px !important;
+    max-width: 100px !important;
+    text-align: center;
+    background: transparent !important;
+}
+
+.points-cell {
+    width: 120px !important;
+    max-width: 120px !important;
+    text-align: center;
+}
+
+/* Adjust table headers for compact columns */
+th.compact-column {
+    width: 75px !important;
+    max-width: 75px !important;
+}
+
+th.charts-column {
+    width: 90px !important;
+    max-width: 90px !important;
+}
+
+th.top-spot-column {
+    width: 65px !important;
+    max-width: 65px !important;
+}
+
+th.points-column {
+    width: 80px !important;
+    max-width: 80px !important;
+}
+
+/* Song title takes remaining space */
+.song-title-column {
+    width: auto !important;
+    min-width: 250px;
+}
+
+.title-cell {
+    padding-left: 10px;
+    padding-right: 10px;
 }
