@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ song_title }} - Questje's ReQuestje's</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-top">
+                <div class="header-left">
+                    <h1><a href="/" class="back-link">🎵 Questje's ReQuestje's Charts 🎵</a></h1>
+                </div>
+                <!-- Auth section - persists across all pages -->
+                <div class="auth-section" id="authSection">
+                    <!-- Login/User info will be inserted here by JavaScript -->
+                </div>
+            </div>
+            <div class="back-button-container">
+                <button class="back-to-charts-btn" onclick="window.location.href='/'">
+                    ← Back to Charts
+                </button>
+            </div>
+        </header>
+
+        <main class="song-page">
+            <div class="song-header">
+                <h2 id="songTitle"></h2>
+                <div class="song-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Charts:</span>
+                        <span class="stat-value" id="totalCharts">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Avg Position:</span>
+                        <span class="stat-value" id="avgPosition">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Best Position:</span>
+                        <span class="stat-value" id="bestPosition">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Worst Position:</span>
+                        <span class="stat-value" id="worstPosition">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="song-content">
+                <div class="chart-container">
+                    <h3>Chart History</h3>
+                    <canvas id="songChart" width="800" height="400"></canvas>
+                    <div id="tooltipContainer" class="tooltip-container"></div>
+                </div>
+
+                <div class="comments-section">
+                    <h3>Comments</h3>
+                    <div id="commentsLoginMessage" class="comments-login-message" style="display: none;">
+                        <p>Please <button onclick="loginWithTwitch()" class="inline-login-btn">login with Twitch</button> to post comments.</p>
+                    </div>
+                    <div id="commentsForm" class="comment-input-area" style="display: none;">
+                        <input type="text" id="commentName" placeholder="Name" maxlength="50" class="comment-input" readonly>
+                        <textarea id="commentText" placeholder="Add a comment..." maxlength="500" class="comment-textarea"></textarea>
+                        <button id="submitComment" class="submit-comment-btn">Post Comment</button>
+                    </div>
+                    <div id="commentsList" class="comments-list"></div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Questje's ReQuestje's © 2025</p>
+        </footer>
+    </div>
+
+    <script>
+        const songTitle = '{{ song_title }}';
+        let chartDataGlobal = [];
+        let statsGlobal = {};
+        let currentUser = null;
+        let currentUserProfilePic = null;
+
+        // Check authentication status on page load
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/auth/status');
+                const data = await response.json();
+                if (data.logged_in) {
+                    currentUser = data.username;
+                    currentUserProfilePic = data.profile_pic;
+                    document.getElementById('commentName').value = currentUser;
+                    document.getElementById('commentsForm').style.display = 'flex';
+                    document.getElementById('commentsLoginMessage').style.display = 'none';
+                } else {
+                    document.getElementById('commentsForm').style.display = 'none';
+                    document.getElementById('commentsLoginMessage').style.display = 'block';
+                }
+                updateAuthDisplay();
+            } catch (error) {
+                console.error('Failed to check auth status:', error);
+            }
+        }
+
+        // Update auth display in header
+        function updateAuthDisplay() {
+            const authSection = document.getElementById('authSection');
+            
+            if (currentUser) {
+                // Build user info HTML with profile pic and icon on the right
+                let html = '<div class="user-info">';
+                html += `<span class="username">Logged in as: <strong>${currentUser}</strong></span>`;
+                if (currentUserProfilePic) {
+                    html += `<img src="${currentUserProfilePic}" alt="${currentUser}" class="profile-pic-small">`;
+                }
+                html += '<i class="fab fa-twitch"></i>';
+                html += '<button class="logout-btn" onclick="logout()">Logout</button>';
+                html += '</div>';
+                authSection.innerHTML = html;
+            } else {
+                authSection.innerHTML = `
+                    <button class="login-btn" onclick="loginWithTwitch()">
+                        <i class="fab fa-twitch"></i> Login with Twitch
+                    </button>
+                `;
+            }
+        }
+
+        // Login with Twitch
+        function loginWithTwitch() {
+            window.location.href = '/auth/login';
+        }
+
+        // Logout
+        async function logout() {
+            try {
+                const response = await fetch('/auth/logout', { method: 'POST' });
+                if (response.ok) {
+                    currentUser = null;
+                    currentUserProfilePic = null;
+                    location.reload();
+                }
+            } catch (error) {
+                console.error('Failed to logout:', error);
+            }
+        }
+
+        // Load song data
+        async function loadSongData() {
+            try {
+                const response = await fetch(`/api/song/${encodeURIComponent(songTitle)}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    alert('Song not found: ' + data.error);
+                    window.location.href = '/';
+                    return;
+                }
+
+                chartDataGlobal = data.chart_data;
+                statsGlobal = data.stats;
+
+                // Update page
+                document.getElementById('songTitle').textContent = data.title;
+                document.getElementById('totalCharts').textContent = statsGlobal.total_charts;
+                document.getElementById('avgPosition').textContent = statsGlobal.avg_position.toFixed(1);
+                document.getElementById('bestPosition').textContent = statsGlobal.best_position;
+                document.getElementById('worstPosition').textContent = statsGlobal.worst_position;
+
+                // Draw chart
+                drawSongChart();
+                
+                // Load comments
+                loadComments();
+
+            } catch (error) {
+                console.error('Failed to load song data:', error);
+                alert('Error loading song data');
+            }
+        }
+
+        // Draw the main song chart with visible position labels
+        function drawSongChart() {
+            const canvas = document.getElementById('songChart');
+            const ctx = canvas.getContext('2d');
+
+            const padding = 40;
+            const chartWidth = canvas.width - 2 * padding;
+            const chartHeight = canvas.height - 2 * padding;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (chartDataGlobal.length === 0) {
+                ctx.fillStyle = '#999';
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('No chart data available', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            // Get position range
+            const positions = chartDataGlobal.map(d => d.position);
+            const minPos = Math.min(...positions);
+            const maxPos = Math.max(...positions);
+            const posRange = maxPos - minPos || 1;
+
+            const chartNums = chartDataGlobal.map(d => d.chart);
+            const minChart = Math.min(...chartNums);
+            const maxChart = Math.max(...chartNums);
+            const chartRange = maxChart - minChart || 1;
+
+            // Draw background grid
+            ctx.strokeStyle = '#f0f0f0';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 10; i++) {
+                const y = padding + (i / 10) * chartHeight;
+                ctx.beginPath();
+                ctx.moveTo(padding, y);
+                ctx.lineTo(canvas.width - padding, y);
+                ctx.stroke();
+            }
+
+            // Draw axes
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(padding, padding);
+            ctx.lineTo(padding, canvas.height - padding);
+            ctx.lineTo(canvas.width - padding, canvas.height - padding);
+            ctx.stroke();
+
+            // Draw axis labels
+            ctx.fillStyle = '#666';
+            ctx.font = '11px Arial';
+            ctx.textAlign = 'right';
+
+            // Y-axis label (#1 at top)
+            ctx.fillText(`#${minPos}`, padding - 5, padding + 5);
+            ctx.fillText(`#${maxPos}`, padding - 5, canvas.height - padding + 5);
+
+            // X-axis labels
+            ctx.textAlign = 'center';
+            ctx.fillText(`${minChart}`, padding, canvas.height - padding + 20);
+            ctx.fillText(`${maxChart}`, canvas.width - padding, canvas.height - padding + 20);
+
+            // Draw line
+            ctx.strokeStyle = '#3498db';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+
+            chartDataGlobal.forEach((point, idx) => {
+                const x = padding + ((point.chart - minChart) / chartRange) * chartWidth;
+                const y = padding + ((point.position - minPos) / posRange) * chartHeight;
+
+                if (idx === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+
+            ctx.stroke();
+
+            // Draw data points and ALWAYS visible position labels
+            ctx.fillStyle = '#3498db';
+            chartDataGlobal.forEach((point) => {
+                const x = padding + ((point.chart - minChart) / chartRange) * chartWidth;
+                const y = padding + ((point.position - minPos) / posRange) * chartHeight;
+
+                // Draw circle for data point
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // ALWAYS show position label above the point
+                ctx.fillStyle = '#333';
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`#${point.position}`, x, y - 10);
+                ctx.fillStyle = '#3498db';
+
+                // Highlight #1 positions
+                if (point.position === 1) {
+                    ctx.strokeStyle = '#f39c12';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 7, 0, 2 * Math.PI);
+                    ctx.stroke();
+                }
+            });
+
+            // Add hover interaction for data points with reliable hitbox
+            const canvas_elem = document.getElementById('songChart');
+            
+            canvas_elem.onmousemove = function(e) {
+                const rect = canvas_elem.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                // Find nearest point with larger hitbox
+                let nearest = null;
+                let minDist = Infinity;
+
+                chartDataGlobal.forEach((point) => {
+                    const x = padding + ((point.chart - minChart) / chartRange) * chartWidth;
+                    const y = padding + ((point.position - minPos) / posRange) * chartHeight;
+
+                    const dist = Math.sqrt((mouseX - x) ** 2 + (mouseY - y) ** 2);
+                    // 25px hitbox for reliable hover
+                    if (dist < minDist && dist < 25) {
+                        minDist = dist;
+                        nearest = { ...point, px: x, py: y };
+                    }
+                });
+
+                if (nearest) {
+                    showTooltip(e, nearest);
+                    canvas_elem.style.cursor = 'pointer';
+                } else {
+                    hideTooltip();
+                    canvas_elem.style.cursor = 'default';
+                }
+            };
+
+            canvas_elem.onmouseleave = function() {
+                hideTooltip();
+                canvas_elem.style.cursor = 'default';
+            };
+        }
+
+        // Show tooltip on data point
+        function showTooltip(e, point) {
+            const tooltip = document.getElementById('tooltipContainer');
+            tooltip.innerHTML = `<div class="tooltip">Chart ${point.chart}: <strong>#${point.position}</strong></div>`;
+            tooltip.style.display = 'block';
+            tooltip.style.left = e.clientX + 'px';
+            tooltip.style.top = (e.clientY - 30) + 'px';
+        }
+
+        // Hide tooltip
+        function hideTooltip() {
+            document.getElementById('tooltipContainer').style.display = 'none';
+        }
+
+        // Load comments for the song
+        async function loadComments() {
+            try {
+                const response = await fetch(`/api/comments/${encodeURIComponent(songTitle)}`);
+                const data = await response.json();
+
+                const commentsList = document.getElementById('commentsList');
+                commentsList.innerHTML = '';
+
+                if (data.comments.length === 0) {
+                    commentsList.innerHTML = '<p class="no-comments">No comments yet. Be the first to comment!</p>';
+                    return;
+                }
+
+                // Sort by date (newest first)
+                data.comments.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+                data.comments.forEach(comment => {
+                    const commentDiv = document.createElement('div');
+                    commentDiv.className = 'comment-item';
+
+                    const date = new Date(comment.timestamp);
+                    const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+
+                    let authorHTML = `<strong class="comment-author">${escapeHtml(comment.user)}</strong>`;
+                    
+                    // Add profile pic if available
+                    if (comment.profile_pic) {
+                        authorHTML = `<img src="${comment.profile_pic}" alt="${comment.user}" class="comment-profile-pic"> ` + authorHTML;
+                    }
+
+                    commentDiv.innerHTML = `
+                        <div class="comment-header">
+                            <div class="comment-author-info">
+                                ${authorHTML}
+                            </div>
+                            <span class="comment-date">${dateStr}</span>
+                        </div>
+                        <div class="comment-text">${escapeHtml(comment.text)}</div>
+                    `;
+
+                    commentsList.appendChild(commentDiv);
+                });
+
+            } catch (error) {
+                console.error('Failed to load comments:', error);
+            }
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Submit a new comment
+        document.addEventListener('DOMContentLoaded', () => {
+            const submitBtn = document.getElementById('submitComment');
+            if (submitBtn) {
+                submitBtn.addEventListener('click', async () => {
+                    const name = document.getElementById('commentName').value.trim();
+                    const text = document.getElementById('commentText').value.trim();
+
+                    if (!name || !text) {
+                        alert('Please fill in both name and comment');
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch('/api/comments', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                song_title: songTitle,
+                                user: name,
+                                text: text
+                            })
+                        });
+
+                        if (response.ok) {
+                            document.getElementById('commentText').value = '';
+                            loadComments();
+                        } else {
+                            alert('Failed to post comment');
+                        }
+                    } catch (error) {
+                        console.error('Failed to post comment:', error);
+                        alert('Error posting comment');
+                    }
+                });
+            }
+
+            // Load page data
+            checkAuth();
+            loadSongData();
+        });
+    </script>
+</body>
+</html>
