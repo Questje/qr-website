@@ -23,7 +23,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 # Twitch OAuth configuration
 TWITCH_CLIENT_ID = os.getenv('TWITCH_CLIENT_ID')
 TWITCH_CLIENT_SECRET = os.getenv('TWITCH_CLIENT_SECRET')
-TWITCH_REDIRECT_URI = os.getenv('TWITCH_REDIRECT_URI', 'http://localhost:5001/auth/callback')
+TWITCH_REDIRECT_URI = os.getenv('TWITCH_REDIRECT_URI', 'https://qr-chart-web.onrender.com/auth/callback')
 TWITCH_AUTH_BASE_URL = 'https://id.twitch.tv/oauth2/authorize'
 TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
 TWITCH_API_URL = 'https://api.twitch.tv/helix/users'
