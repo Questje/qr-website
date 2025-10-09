@@ -5,11 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Questje's ReQuestje's</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🎵 Questje's ReQuestje's Charts 🎵 </h1>
+            <div class="header-top">
+                <h1>🎵 Questje's ReQuestje's Charts 🎵 </h1>
+                <!-- Auth section - persists across all pages -->
+                <div class="auth-section" id="authSection">
+                    <!-- Login/User info will be inserted here by JavaScript -->
+                </div>
+            </div>
             <div class="controls">
                 <button id="prevChart" class="nav-button">
                     ← PREVIOUS
@@ -110,6 +117,7 @@
             <button id="closePopup" class="close-popup">×</button>
         </div>
         <canvas id="historyChart" width="300" height="150"></canvas>
+        <div id="chartTooltipContainer" class="chart-tooltip-container"></div>
     </div>
 
     <script>
@@ -122,6 +130,66 @@
         let currentHoverTimeout = null;
         let activeMovementFilter = null;
         let activeSongFilter = '';
+        let currentUser = null;
+        let currentUserProfilePic = null;
+
+        // Check authentication status on page load
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/auth/status');
+                const data = await response.json();
+                if (data.logged_in) {
+                    currentUser = data.username;
+                    currentUserProfilePic = data.profile_pic;
+                }
+                updateAuthDisplay();
+            } catch (error) {
+                console.error('Failed to check auth status:', error);
+            }
+        }
+
+        // Update auth display in header
+        function updateAuthDisplay() {
+            const authSection = document.getElementById('authSection');
+            
+            if (currentUser) {
+                // Build user info HTML with profile pic
+                let html = '<div class="user-info">';
+                html += `<span class="username">Logged in as: <strong>${currentUser}</strong></span>`;
+                if (currentUserProfilePic) {
+                    html += `<img src="${currentUserProfilePic}" alt="${currentUser}" class="profile-pic-small">`;
+                }
+                html += '<i class="fab fa-twitch"></i>';
+                html += '<button class="logout-btn" onclick="logout()">Logout</button>';
+                html += '</div>';
+                authSection.innerHTML = html;
+            } else {
+                authSection.innerHTML = `
+                    <button class="login-btn" onclick="loginWithTwitch()">
+                        <i class="fab fa-twitch"></i> Login with Twitch
+                    </button>
+                `;
+            }
+        }
+
+        // Login with Twitch
+        function loginWithTwitch() {
+            window.location.href = '/auth/login';
+        }
+
+        // Logout
+        async function logout() {
+            try {
+                const response = await fetch('/auth/logout', { method: 'POST' });
+                if (response.ok) {
+                    currentUser = null;
+                    currentUserProfilePic = null;
+                    location.reload();
+                }
+            } catch (error) {
+                console.error('Failed to logout:', error);
+            }
+        }
 
         // Load chart data
         async function loadChart(chartNumber) {
@@ -212,9 +280,9 @@
         // Format song title with #1 label
         function formatSongTitle(title, numberOnes) {
             if (numberOnes > 0) {
-                return `${title} <span class="number-one-label">${numberOnes}x #1</span>`;
+                return `<span class="song-title-text">${title}</span> <span class="number-one-label">${numberOnes}x #1</span>`;
             }
-            return title;
+            return `<span class="song-title-text">${title}</span>`;
         }
 
         // Show chart history popup
@@ -239,7 +307,6 @@
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
                 if (data.chart_data.length === 0) {
-                    // No data to show
                     ctx.fillStyle = '#666';
                     ctx.font = '14px Arial';
                     ctx.textAlign = 'center';
@@ -273,13 +340,13 @@
             }
         }
 
-        // Draw line chart for song history
+        // Draw line chart for song history with visible position labels on all data points
         function drawLineChart(ctx, canvas, data, currentChart) {
             const padding = 25;
             const width = canvas.width - 2 * padding;
             const height = canvas.height - 2 * padding;
             
-            // Filter data to only include charts up to currentChart (or all if in All Songs view)
+            // Filter data to only include charts up to currentChart
             const filteredData = currentChart === 0 ? data : data.filter(d => d.chart <= currentChart);
             
             if (filteredData.length === 0) return;
@@ -295,7 +362,7 @@
             const maxChart = Math.max(...charts);
             const chartRange = maxChart - minChart || 1;
             
-            // Draw axes (subtle)
+            // Draw axes
             ctx.strokeStyle = '#e0e0e0';
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -309,7 +376,7 @@
             ctx.font = '9px Arial';
             ctx.textAlign = 'left';
             
-            // Y-axis labels (positions - now correctly oriented with #1 at top)
+            // Y-axis labels
             ctx.save();
             ctx.translate(10, padding);
             ctx.textAlign = 'right';
@@ -322,19 +389,18 @@
             ctx.fillText(`#${maxPosition}`, 0, -2);
             ctx.restore();
             
-            // X-axis labels (chart numbers)
+            // X-axis labels
             ctx.textAlign = 'center';
             ctx.fillText(`${minChart}`, padding, canvas.height - padding + 12);
             ctx.fillText(`${maxChart}`, canvas.width - padding, canvas.height - padding + 12);
             
-            // Draw the line chart
+            // Draw the line
             ctx.strokeStyle = '#3498db';
             ctx.lineWidth = 2;
             ctx.beginPath();
             
             filteredData.forEach((point, index) => {
                 const x = padding + ((point.chart - minChart) / chartRange) * width;
-                // Position 1 at top, higher positions lower (correct orientation)
                 const y = padding + ((point.position - minPosition) / positionRange) * height;
                 
                 if (index === 0) {
@@ -346,15 +412,23 @@
             
             ctx.stroke();
             
-            // Draw points
+            // Draw points and position labels - ALWAYS VISIBLE
             ctx.fillStyle = '#3498db';
             filteredData.forEach((point) => {
                 const x = padding + ((point.chart - minChart) / chartRange) * width;
                 const y = padding + ((point.position - minPosition) / positionRange) * height;
                 
+                // Draw circle for data point
                 ctx.beginPath();
                 ctx.arc(x, y, 3, 0, 2 * Math.PI);
                 ctx.fill();
+                
+                // ALWAYS show position label above the point
+                ctx.fillStyle = '#333';
+                ctx.font = 'bold 9px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`#${point.position}`, x, y - 9);
+                ctx.fillStyle = '#3498db';
                 
                 // Highlight #1 positions
                 if (point.position === 1) {
@@ -366,21 +440,59 @@
                     ctx.strokeStyle = '#3498db';
                 }
             });
+
+            // Set up hover interaction - store data for reuse
+            const canvas_elem = document.getElementById('historyChart');
             
-            // Draw position labels for key points
-            ctx.fillStyle = '#666';
-            ctx.font = '10px Arial';
-            ctx.textAlign = 'center';
-            
-            // Show first, last, and #1 positions
-            filteredData.forEach((point, index) => {
-                if (index === 0 || index === filteredData.length - 1 || point.position === 1) {
+            // Remove old listeners to prevent duplicates
+            canvas_elem.onmousemove = function(e) {
+                const rect = canvas_elem.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                // Find nearest point with larger hitbox
+                let nearest = null;
+                let minDist = Infinity;
+
+                filteredData.forEach((point) => {
                     const x = padding + ((point.chart - minChart) / chartRange) * width;
                     const y = padding + ((point.position - minPosition) / positionRange) * height;
-                    
-                    ctx.fillText(`#${point.position}`, x, y - 8);
+
+                    const dist = Math.sqrt((mouseX - x) ** 2 + (mouseY - y) ** 2);
+                    // 25px hitbox for reliable hover
+                    if (dist < minDist && dist < 25) {
+                        minDist = dist;
+                        nearest = { ...point, px: x, py: y };
+                    }
+                });
+
+                if (nearest) {
+                    showChartTooltip(e, nearest);
+                    canvas_elem.style.cursor = 'pointer';
+                } else {
+                    hideChartTooltip();
+                    canvas_elem.style.cursor = 'default';
                 }
-            });
+            };
+
+            canvas_elem.onmouseleave = function() {
+                hideChartTooltip();
+                canvas_elem.style.cursor = 'default';
+            };
+        }
+
+        // Show tooltip for chart data point with format "#3 (Chart 2)"
+        function showChartTooltip(e, point) {
+            const tooltip = document.getElementById('chartTooltipContainer');
+            tooltip.innerHTML = `<div class="chart-tooltip">#${point.position} (Chart ${point.chart})</div>`;
+            tooltip.style.display = 'block';
+            tooltip.style.left = e.clientX + 'px';
+            tooltip.style.top = (e.clientY - 25) + 'px';
+        }
+
+        // Hide tooltip for chart data point
+        function hideChartTooltip() {
+            document.getElementById('chartTooltipContainer').style.display = 'none';
         }
 
         // Hide chart history popup
@@ -388,43 +500,16 @@
             document.getElementById('chartHistoryPopup').style.display = 'none';
         }
         
-        // Get color for top spot position - gradient from green (#1) to red (worst)
-        function getTopSpotColor(position) {
-            if (!position || position > 100) return '#999999';
-            
-            // Create gradient from green (0) to yellow (50) to red (100)
-            const ratio = Math.min(position - 1, 99) / 99; // Normalize to 0-1
-            
-            let r, g, b;
-            if (ratio < 0.5) {
-                // Green to Yellow
-                const localRatio = ratio * 2;
-                r = Math.round(255 * localRatio);
-                g = 255;
-                b = 0;
-            } else {
-                // Yellow to Red
-                const localRatio = (ratio - 0.5) * 2;
-                r = 255;
-                g = Math.round(255 * (1 - localRatio));
-                b = 0;
-            }
-            
-            return `rgb(${r}, ${g}, ${b})`;
-        }
-        
         // Apply filters to data
         function applyFilters() {
             filteredData = [...currentData];
             
-            // Apply song filter
             if (activeSongFilter) {
                 filteredData = filteredData.filter(song => 
                     song.title.toLowerCase().includes(activeSongFilter.toLowerCase())
                 );
             }
             
-            // Apply movement filter (only for non-All Songs view)
             if (activeMovementFilter && currentChartNumber !== 0) {
                 filteredData = filteredData.filter(song => 
                     song.movement_type === activeMovementFilter
@@ -479,17 +564,21 @@
                 const tr = document.createElement('tr');
                 tr.className = 'chart-row';
                 
+                // Make entire row clickable to go to song page
+                tr.addEventListener('click', () => {
+                    window.location.href = `/song/${encodeURIComponent(row.title)}`;
+                });
+                
                 // Add hover events for chart history
                 tr.addEventListener('mouseenter', (e) => {
                     clearTimeout(currentHoverTimeout);
                     currentHoverTimeout = setTimeout(() => {
                         showChartHistory(row.title, e);
-                    }, 500); // Show after 500ms hover
+                    }, 500);
                 });
                 
                 tr.addEventListener('mouseleave', () => {
                     clearTimeout(currentHoverTimeout);
-                    // Don't hide immediately to allow moving to the popup
                     setTimeout(() => {
                         const popup = document.getElementById('chartHistoryPopup');
                         if (!popup.matches(':hover')) {
@@ -526,7 +615,6 @@
                             break;
                     }
                 } else {
-                    // For "All Songs" view, color by ranking
                     if (row.position <= 3) {
                         positionClass += ' top-three';
                     } else if (row.position <= 10) {
@@ -536,8 +624,6 @@
                     }
                 }
                 
-                // Get top spot color
-                //const topSpotColor = getTopSpotColor(row.top_spot || 999);
                 const topSpotColor = '#474747ff';
                 const topSpotDisplay = row.top_spot ? 
                     `<span style="color: ${topSpotColor}; font-weight: bold;">${row.top_spot}</span>` : 
@@ -576,7 +662,6 @@
                 let aVal = a[column];
                 let bVal = b[column];
                 
-                // Handle special cases
                 if (column === 'prev_position') {
                     aVal = aVal === '--' ? 999 : parseInt(aVal);
                     bVal = bVal === '--' ? 999 : parseInt(bVal);
@@ -617,7 +702,7 @@
             });
         }
 
-        // Load info
+        // Load general info
         async function loadInfo() {
             try {
                 const response = await fetch('/api/info');
@@ -629,23 +714,21 @@
             }
         }
 
-        // Event listeners
+        // Initialize on page load
         document.addEventListener('DOMContentLoaded', () => {
-            // Load initial data
+            checkAuth();
+
             {% if has_data %}
                 loadChart({{ num_charts }});
                 loadInfo();
                 
-                // Initialize filters container visibility
                 document.querySelector('.filters-container').style.display = 'flex';
             {% endif %}
             
-            // Chart selector
             document.getElementById('chartSelector').addEventListener('change', (e) => {
                 loadChart(parseInt(e.target.value));
             });
             
-            // Navigation buttons
             document.getElementById('prevChart').addEventListener('click', () => {
                 navigateChart(-1);
             });
@@ -654,17 +737,14 @@
                 navigateChart(1);
             });
             
-            // Close popup button
             document.getElementById('closePopup').addEventListener('click', hideChartHistory);
             
-            // Keep popup open when hovering over it
             document.getElementById('chartHistoryPopup').addEventListener('mouseenter', () => {
                 clearTimeout(currentHoverTimeout);
             });
             
             document.getElementById('chartHistoryPopup').addEventListener('mouseleave', hideChartHistory);
             
-            // Keyboard navigation
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'ArrowLeft' && !e.target.matches('input, select, textarea')) {
                     navigateChart(-1);
@@ -675,40 +755,33 @@
                 }
             });
             
-            // Sort headers
             document.querySelectorAll('th.sortable').forEach(th => {
                 th.addEventListener('click', () => {
                     sortTable(th.dataset.column);
                 });
             });
             
-            // Song filter input
             document.getElementById('songFilter').addEventListener('input', (e) => {
                 activeSongFilter = e.target.value.trim();
                 applyFilters();
             });
             
-            // Clear filter button
             document.getElementById('clearFilter').addEventListener('click', () => {
                 document.getElementById('songFilter').value = '';
                 activeSongFilter = '';
                 applyFilters();
             });
             
-            // Movement filter clicks
             document.querySelectorAll('.legend-item.clickable').forEach(item => {
                 item.addEventListener('click', () => {
-                    // Don't allow movement filters in All Songs view
                     if (currentChartNumber === 0) return;
                     
                     const filterType = item.dataset.filter;
                     
-                    // Toggle filter
                     if (activeMovementFilter === filterType) {
                         activeMovementFilter = null;
                         item.classList.remove('active-filter');
                     } else {
-                        // Remove active class from all items
                         document.querySelectorAll('.legend-item').forEach(i => {
                             i.classList.remove('active-filter');
                         });

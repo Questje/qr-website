@@ -10,15 +10,14 @@ from typing import Dict, List, Tuple, Optional
 
 class ChartDataProcessor:
     def __init__(self, data_path: str = "Chart.xlsx"):
+        """Initialize the chart data processor"""
         self.data_path = data_path
         self.chart_data = {}
         self.songs = []
         self.num_charts = 0
         
     def normalize_song_title(self, title: str) -> str:
-        """
-        Normalize song titles by removing extra spaces and special characters
-        """
+        """Normalize song titles by removing extra spaces and special characters"""
         if pd.isna(title) or title == "":
             return ""
         
@@ -37,10 +36,7 @@ class ChartDataProcessor:
         return title.strip()
     
     def find_chart_columns(self, df: pd.DataFrame) -> List[Tuple[str, int]]:
-        """
-        Find chart columns (1-19) regardless of their data type in the Excel/CSV file
-        Returns list of tuples: (column_name, chart_number)
-        """
+        """Find chart columns (1-19) regardless of their data type in the Excel/CSV file"""
         chart_columns = []
         
         print("🔍 Analyzing column headers...")
@@ -50,7 +46,7 @@ class ChartDataProcessor:
             # Convert column name to string for analysis
             col_str = str(col).strip()
             
-            # Try to match numbers 1-99 (extended range for flexibility)
+            # Try to match numbers 1-99
             try:
                 # Handle different possible formats
                 if col_str.isdigit():
@@ -71,7 +67,6 @@ class ChartDataProcessor:
                     print(f"✅ Found chart column: '{col}' -> Chart {chart_num}")
             
             except (ValueError, TypeError):
-                # Skip columns that can't be converted to numbers
                 continue
         
         # Sort by chart number to ensure proper order
@@ -80,9 +75,7 @@ class ChartDataProcessor:
         return chart_columns
     
     def find_song_column(self, df: pd.DataFrame) -> Optional[str]:
-        """
-        Find the song column, handling different possible names
-        """
+        """Find the song column, handling different possible names"""
         possible_song_columns = ['Song', 'song', 'SONG', 'Title', 'title', 'TITLE', 'Track', 'track', 'TRACK']
         
         for col in df.columns:
@@ -101,9 +94,7 @@ class ChartDataProcessor:
         return None
     
     def read_data_file(self) -> pd.DataFrame:
-        """
-        Read data from Excel or CSV file based on file extension
-        """
+        """Read data from Excel or CSV file based on file extension"""
         file_ext = os.path.splitext(self.data_path)[1].lower()
         
         if file_ext in ['.xlsx', '.xls']:
@@ -124,12 +115,9 @@ class ChartDataProcessor:
         return df
     
     def process_chart_data(self) -> Tuple[bool, str]:
-        """
-        Read and process the Excel/CSV chart data
-        Returns: (success, message)
-        """
+        """Read and process the Excel/CSV chart data"""
         try:
-            # Read data file (Excel or CSV)
+            # Read data file
             df = self.read_data_file()
             
             print(f"📊 Sheet dimensions: {df.shape[0]} rows × {df.shape[1]} columns")
@@ -206,9 +194,9 @@ class ChartDataProcessor:
             # Show some sample data for verification
             if processed_songs > 0:
                 print(f"\n📋 Sample processed songs:")
-                for i, song in enumerate(self.songs[:3]):  # Show first 3 songs
+                for i, song in enumerate(self.songs[:3]):
                     chart_positions = [f"Chart {num}: {pos if pos else '--'}" 
-                                     for num, pos in sorted(song["positions"].items())[:5]]  # Show first 5 charts
+                                     for num, pos in sorted(song["positions"].items())[:5]]
                     print(f"   {i+1}. '{song['title']}' - {', '.join(chart_positions)}... (appears in {song['total_charts']} charts)")
             
             file_type = "Excel" if os.path.splitext(self.data_path)[1].lower() in ['.xlsx', '.xls'] else "CSV"
@@ -225,9 +213,7 @@ class ChartDataProcessor:
             return False, f"❌ Unexpected error: {str(e)}"
     
     def get_chart_data(self, chart_number: int) -> List[Dict]:
-        """
-        Get data for a specific chart number, sorted by position
-        """
+        """Get data for a specific chart number, sorted by position"""
         chart_data = []
         
         for song in self.songs:
@@ -256,9 +242,7 @@ class ChartDataProcessor:
         return chart_data
     
     def get_song_history(self, song_title: str) -> Dict:
-        """
-        Get the complete chart history for a specific song
-        """
+        """Get the complete chart history for a specific song"""
         for song in self.songs:
             if song["title"].lower() == song_title.lower():
                 return {
@@ -269,7 +253,5 @@ class ChartDataProcessor:
         return None
     
     def get_all_songs_data(self) -> List[Dict]:
-        """
-        Get all songs with their complete data
-        """
+        """Get all songs with their complete data"""
         return self.songs
