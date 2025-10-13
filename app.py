@@ -16,6 +16,9 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Admin user configuration
+ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
+
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-change-this')
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
@@ -23,16 +26,20 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 # Twitch OAuth configuration
 TWITCH_CLIENT_ID = os.getenv('TWITCH_CLIENT_ID')
 TWITCH_CLIENT_SECRET = os.getenv('TWITCH_CLIENT_SECRET')
-TWITCH_REDIRECT_URI = os.getenv('TWITCH_REDIRECT_URI', 'https://qr-chart-web.onrender.com/auth/callback')
+TWITCH_REDIRECT_URI = os.getenv('TWITCH_REDIRECT_URI', 'http://localhost:5001/auth/callback')
 TWITCH_AUTH_BASE_URL = 'https://id.twitch.tv/oauth2/authorize'
 TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
 TWITCH_API_URL = 'https://api.twitch.tv/helix/users'
 
 # Get data file from command line argument or use default
-data_file = "Chart.xlsx"
-print(f"📂 Using default data file: {data_file}")
+if len(sys.argv) > 1:
+    data_file = sys.argv[1]
+    print(f"📂 Using data file from argument: {data_file}")
+else:
+    data_file = "Chart.xlsx"
+    print(f"📂 Using default data file: {data_file}")
 
-# Initialize data processor
+# Initialize data processor and comment manager
 processor = ChartDataProcessor(data_file)
 comment_manager = CommentManager()
 
@@ -172,12 +179,14 @@ def auth_status():
         return jsonify({
             "logged_in": True,
             "username": user,
-            "profile_pic": profile_pic
+            "profile_pic": profile_pic,
+            "is_admin": user.lower() == ADMIN_USERNAME.lower()
         })
     return jsonify({
         "logged_in": False,
         "username": None,
-        "profile_pic": None
+        "profile_pic": None,
+        "is_admin": False
     })
 
 # ============ MAIN ROUTES ============
@@ -397,14 +406,80 @@ def add_comment():
     # Get profile pic from session if user is logged in
     profile_pic = session.get('profile_pic', None)
     
-    comment_manager.add_comment(
+    success = comment_manager.add_comment(
         data['song_title'],
         data['user'],
         data['text'],
         profile_pic
     )
     
-    return jsonify({"success": True}), 201
+    if success:
+        return jsonify({"success": True}), 201
+    else:
+        return jsonify({"error": "Failed to add comment"}), 500
+
+@app.route('/api/comments/<int:comment_id>', methods=['PUT'])
+def update_comment(comment_id):
+    """API endpoint to update a comment"""
+    if 'user' not in session:
+        return jsonify({"error": "Authentication required"}), 401
+    
+    data = request.json
+    if not data or 'text' not in data:
+        return jsonify({"error": "Missing comment text"}), 400
+    
+    user = session.get('user')
+    is_admin = user.lower() == ADMIN_USERNAME.lower()
+    
+    success = comment_manager.update_comment(
+        comment_id,
+        data['text'],
+        user,
+        is_admin
+    )
+    
+    if success:
+        return jsonify({"success": True}), 200
+    else:
+        return jsonify({"error": "Failed to update comment or permission denied"}), 403
+
+@app.route('/api/comments/<int:comment_id>', methods=['DELETE'])
+def delete_comment(comment_id):
+    """API endpoint to delete a comment (admin only)"""
+    if 'user' not in session:
+        return jsonify({"error": "Authentication required"}), 401
+    
+    user = session.get('user')
+    is_admin = user.lower() == ADMIN_USERNAME.lower()
+    
+    # Only admin can delete comments
+    if not is_admin:
+        return jsonify({"error": "Admin privileges required"}), 403
+    
+    success = comment_manager.delete_comment(
+        comment_id,
+        user,
+        is_admin
+    )
+    
+    if success:
+        return jsonify({"success": True}), 200
+    else:
+        return jsonify({"error": "Failed to delete comment"}), 500
+
+@app.route('/api/comments/<int:comment_id>/like', methods=['POST'])
+def toggle_comment_like(comment_id):
+    """API endpoint to toggle like on a comment"""
+    if 'user' not in session:
+        return jsonify({"error": "Authentication required"}), 401
+    
+    user = session.get('user')
+    success = comment_manager.toggle_like(comment_id, user)
+    
+    if success:
+        return jsonify({"success": True}), 200
+    else:
+        return jsonify({"error": "Failed to toggle like"}), 500
 
 @app.route('/api/info')
 def get_info():
@@ -414,6 +489,18 @@ def get_info():
         "num_songs": len(processor.songs),
         "has_data": success
     })
+
+# Close database connection when app shuts down
+def close_db_connection():
+    """Close database connection"""
+    try:
+        if hasattr(comment_manager, 'close_connection'):
+            comment_manager.close_connection()
+    except Exception as e:
+        print(f"⚠️  Error closing database connection: {e}")
+
+import atexit
+atexit.register(close_db_connection)
 
 if __name__ == '__main__':
     print("\n🎵 Music Chart Website Generator")

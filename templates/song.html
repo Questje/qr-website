@@ -53,7 +53,6 @@
                 <div class="chart-container">
                     <h3>Chart History</h3>
                     <canvas id="songChart" width="800" height="400"></canvas>
-                    <div id="tooltipContainer" class="tooltip-container"></div>
                 </div>
 
                 <div class="comments-section">
@@ -63,15 +62,23 @@
                     </div>
                     <div id="commentsForm" class="comment-input-area" style="display: none;">
                         <input type="text" id="commentName" placeholder="Name" maxlength="50" class="comment-input" readonly>
-                        <textarea id="commentText" placeholder="Add a comment..." maxlength="500" class="comment-textarea"></textarea>
+                        <textarea id="commentText" placeholder="Add a comment..." maxlength="200" class="comment-textarea"></textarea>
+                        <div class="char-counter">
+                            <span id="charCount">0</span>/200
+                        </div>
                         <button id="submitComment" class="submit-comment-btn">Post Comment</button>
                     </div>
                     <div id="commentsList" class="comments-list"></div>
+                    <div id="commentsPagination" class="comments-pagination" style="display: none;">
+                        <button id="prevPage" class="pagination-btn">← Previous</button>
+                        <span id="pageInfo" class="page-info"></span>
+                        <button id="nextPage" class="pagination-btn">Next →</button>
+                    </div>
                 </div>
             </div>
         </main>
 
-        <footer>
+        <footer style="margin-top: 40px;">
             <p>Questje's ReQuestje's © 2025</p>
         </footer>
     </div>
@@ -82,6 +89,10 @@
         let statsGlobal = {};
         let currentUser = null;
         let currentUserProfilePic = null;
+        let isAdmin = false;
+        let allComments = [];
+        let currentPage = 1;
+        let commentsPerPage = 5;
 
         // Check authentication status on page load
         async function checkAuth() {
@@ -91,6 +102,7 @@
                 if (data.logged_in) {
                     currentUser = data.username;
                     currentUserProfilePic = data.profile_pic;
+                    isAdmin = data.is_admin || false;
                     document.getElementById('commentName').value = currentUser;
                     document.getElementById('commentsForm').style.display = 'flex';
                     document.getElementById('commentsLoginMessage').style.display = 'none';
@@ -112,6 +124,9 @@
                 // Build user info HTML with profile pic and icon on the right
                 let html = '<div class="user-info">';
                 html += `<span class="username">Logged in as: <strong>${currentUser}</strong></span>`;
+                if (isAdmin) {
+                    html += '<span class="admin-badge">ADMIN</span>';
+                }
                 if (currentUserProfilePic) {
                     html += `<img src="${currentUserProfilePic}" alt="${currentUser}" class="profile-pic-small">`;
                 }
@@ -140,6 +155,7 @@
                 if (response.ok) {
                     currentUser = null;
                     currentUserProfilePic = null;
+                    isAdmin = false;
                     location.reload();
                 }
             } catch (error) {
@@ -169,7 +185,7 @@
                 document.getElementById('bestPosition').textContent = statsGlobal.best_position;
                 document.getElementById('worstPosition').textContent = statsGlobal.worst_position;
 
-                // Draw chart
+                // Draw chart with animation
                 drawSongChart();
                 
                 // Load comments
@@ -181,7 +197,7 @@
             }
         }
 
-        // Draw the main song chart with visible position labels
+        // Draw the main song chart with smooth animation that hits all data points
         function drawSongChart() {
             const canvas = document.getElementById('songChart');
             const ctx = canvas.getContext('2d');
@@ -190,10 +206,8 @@
             const chartWidth = canvas.width - 2 * padding;
             const chartHeight = canvas.height - 2 * padding;
 
-            // Clear canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
             if (chartDataGlobal.length === 0) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.fillStyle = '#999';
                 ctx.font = '16px Arial';
                 ctx.textAlign = 'center';
@@ -212,185 +226,447 @@
             const maxChart = Math.max(...chartNums);
             const chartRange = maxChart - minChart || 1;
 
-            // Draw background grid
-            ctx.strokeStyle = '#f0f0f0';
-            ctx.lineWidth = 1;
-            for (let i = 0; i <= 10; i++) {
-                const y = padding + (i / 10) * chartHeight;
-                ctx.beginPath();
-                ctx.moveTo(padding, y);
-                ctx.lineTo(canvas.width - padding, y);
-                ctx.stroke();
-            }
+            // Animation variables
+            const animationDuration = 3000; // 3 seconds
+            const startTime = Date.now();
 
-            // Draw axes
-            ctx.strokeStyle = '#333';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(padding, padding);
-            ctx.lineTo(padding, canvas.height - padding);
-            ctx.lineTo(canvas.width - padding, canvas.height - padding);
-            ctx.stroke();
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / animationDuration, 1);
+                
+                // Clear canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw axis labels
-            ctx.fillStyle = '#666';
-            ctx.font = '11px Arial';
-            ctx.textAlign = 'right';
-
-            // Y-axis label (#1 at top)
-            ctx.fillText(`#${minPos}`, padding - 5, padding + 5);
-            ctx.fillText(`#${maxPos}`, padding - 5, canvas.height - padding + 5);
-
-            // X-axis labels
-            ctx.textAlign = 'center';
-            ctx.fillText(`${minChart}`, padding, canvas.height - padding + 20);
-            ctx.fillText(`${maxChart}`, canvas.width - padding, canvas.height - padding + 20);
-
-            // Draw line
-            ctx.strokeStyle = '#3498db';
-            ctx.lineWidth = 2.5;
-            ctx.beginPath();
-
-            chartDataGlobal.forEach((point, idx) => {
-                const x = padding + ((point.chart - minChart) / chartRange) * chartWidth;
-                const y = padding + ((point.position - minPos) / posRange) * chartHeight;
-
-                if (idx === 0) {
-                    ctx.moveTo(x, y);
-                } else {
-                    ctx.lineTo(x, y);
-                }
-            });
-
-            ctx.stroke();
-
-            // Draw data points and ALWAYS visible position labels
-            ctx.fillStyle = '#3498db';
-            chartDataGlobal.forEach((point) => {
-                const x = padding + ((point.chart - minChart) / chartRange) * chartWidth;
-                const y = padding + ((point.position - minPos) / posRange) * chartHeight;
-
-                // Draw circle for data point
-                ctx.beginPath();
-                ctx.arc(x, y, 4, 0, 2 * Math.PI);
-                ctx.fill();
-
-                // ALWAYS show position label above the point
-                ctx.fillStyle = '#333';
-                ctx.font = 'bold 10px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText(`#${point.position}`, x, y - 10);
-                ctx.fillStyle = '#3498db';
-
-                // Highlight #1 positions
-                if (point.position === 1) {
-                    ctx.strokeStyle = '#f39c12';
-                    ctx.lineWidth = 2;
+                // Draw background grid
+                ctx.strokeStyle = '#f0f0f0';
+                ctx.lineWidth = 1;
+                for (let i = 0; i <= 10; i++) {
+                    const y = padding + (i / 10) * chartHeight;
                     ctx.beginPath();
-                    ctx.arc(x, y, 7, 0, 2 * Math.PI);
+                    ctx.moveTo(padding, y);
+                    ctx.lineTo(canvas.width - padding, y);
                     ctx.stroke();
                 }
-            });
 
-            // Add hover interaction for data points with reliable hitbox
-            const canvas_elem = document.getElementById('songChart');
-            
-            canvas_elem.onmousemove = function(e) {
-                const rect = canvas_elem.getBoundingClientRect();
-                const mouseX = e.clientX - rect.left;
-                const mouseY = e.clientY - rect.top;
+                // Draw axes
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(padding, padding);
+                ctx.lineTo(padding, canvas.height - padding);
+                ctx.lineTo(canvas.width - padding, canvas.height - padding);
+                ctx.stroke();
 
-                // Find nearest point with larger hitbox
-                let nearest = null;
-                let minDist = Infinity;
+                // Draw axis labels (bigger font size)
+                ctx.fillStyle = '#666';
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'right';
 
+                // Y-axis label (#1 at top)
+                ctx.fillText(`#${minPos}`, padding - 5, padding + 5);
+                ctx.fillText(`#${maxPos}`, padding - 5, canvas.height - padding + 5);
+
+                // X-axis labels (only show charts where the song appeared)
+                ctx.textAlign = 'center';
                 chartDataGlobal.forEach((point) => {
                     const x = padding + ((point.chart - minChart) / chartRange) * chartWidth;
-                    const y = padding + ((point.position - minPos) / posRange) * chartHeight;
-
-                    const dist = Math.sqrt((mouseX - x) ** 2 + (mouseY - y) ** 2);
-                    // 25px hitbox for reliable hover
-                    if (dist < minDist && dist < 25) {
-                        minDist = dist;
-                        nearest = { ...point, px: x, py: y };
-                    }
+                    ctx.fillText(`${point.chart}`, x, canvas.height - padding + 20);
                 });
 
-                if (nearest) {
-                    showTooltip(e, nearest);
-                    canvas_elem.style.cursor = 'pointer';
-                } else {
-                    hideTooltip();
-                    canvas_elem.style.cursor = 'default';
+                // Calculate how many points to show based on animation progress
+                const totalPoints = chartDataGlobal.length;
+                const pointsToShow = Math.floor(totalPoints * progress);
+                const partialProgress = (totalPoints * progress) % 1;
+
+                if (pointsToShow > 0) {
+                    // Prepare points for drawing
+                    const points = chartDataGlobal.slice(0, pointsToShow).map(point => ({
+                        x: padding + ((point.chart - minChart) / chartRange) * chartWidth,
+                        y: padding + ((point.position - minPos) / posRange) * chartHeight,
+                        chart: point.chart,
+                        position: point.position
+                    }));
+
+                    // Add partial point if animation is in progress
+                    if (progress < 1 && pointsToShow < totalPoints) {
+                        const currentPoint = chartDataGlobal[pointsToShow - 1];
+                        const nextPoint = chartDataGlobal[pointsToShow];
+                        if (nextPoint) {
+                            const currentX = padding + ((currentPoint.chart - minChart) / chartRange) * chartWidth;
+                            const currentY = padding + ((currentPoint.position - minPos) / posRange) * chartHeight;
+                            const nextX = padding + ((nextPoint.chart - minChart) / chartRange) * chartWidth;
+                            const nextY = padding + ((nextPoint.position - minPos) / posRange) * chartHeight;
+                            
+                            const interpolatedX = currentX + (nextX - currentX) * partialProgress;
+                            const interpolatedY = currentY + (nextY - currentY) * partialProgress;
+                            
+                            points.push({ 
+                                x: interpolatedX, 
+                                y: interpolatedY, 
+                                chart: currentPoint.chart + (nextPoint.chart - currentPoint.chart) * partialProgress,
+                                position: currentPoint.position + (nextPoint.position - currentPoint.position) * partialProgress,
+                                isPartial: true
+                            });
+                        }
+                    }
+
+                    // Draw smooth line using cardinal spline that passes through all points
+                    if (points.length > 0) {
+                        ctx.strokeStyle = '#3498db';
+                        ctx.lineWidth = 2.5;
+                        ctx.lineCap = 'round';
+                        ctx.lineJoin = 'round';
+
+                        if (points.length === 1) {
+                            // Single point - just draw it
+                            ctx.beginPath();
+                            ctx.moveTo(points[0].x, points[0].y);
+                            ctx.lineTo(points[0].x, points[0].y);
+                        } else if (points.length === 2) {
+                            // Two points - straight line
+                            ctx.beginPath();
+                            ctx.moveTo(points[0].x, points[0].y);
+                            ctx.lineTo(points[1].x, points[1].y);
+                        } else {
+                            // Multiple points - use cardinal spline for smooth curves through points
+                            ctx.beginPath();
+                            ctx.moveTo(points[0].x, points[0].y);
+
+                            for (let i = 1; i < points.length - 1; i++) {
+                                const p0 = points[i - 1];
+                                const p1 = points[i];
+                                const p2 = points[i + 1];
+                                
+                                // Calculate control points for smooth curve
+                                const tension = 0.3; // Adjust tension for smoothness
+                                const cp1x = p1.x + tension * (p2.x - p0.x) / 6;
+                                const cp1y = p1.y + tension * (p2.y - p0.y) / 6;
+                                const cp2x = p2.x - tension * (p2.x - p0.x) / 6;
+                                const cp2y = p2.y - tension * (p2.y - p0.y) / 6;
+
+                                if (i === 1) {
+                                    // First curve
+                                    ctx.bezierCurveTo(
+                                        p0.x + tension * (p1.x - p0.x) / 3,
+                                        p0.y + tension * (p1.y - p0.y) / 3,
+                                        cp1x,
+                                        cp1y,
+                                        p1.x,
+                                        p1.y
+                                    );
+                                }
+
+                                // Curve to next point
+                                ctx.bezierCurveTo(
+                                    p1.x + tension * (p2.x - p1.x) / 3,
+                                    p1.y + tension * (p2.y - p1.y) / 3,
+                                    cp2x,
+                                    cp2y,
+                                    p2.x,
+                                    p2.y
+                                );
+                            }
+
+                            // Handle last segment if we have a partial point
+                            if (points.length >= 2) {
+                                const lastComplete = points.length - (points[points.length - 1].isPartial ? 2 : 1);
+                                const lastPoint = points[points.length - 1];
+                                
+                                if (lastPoint.isPartial && lastComplete >= 0) {
+                                    const prevPoint = points[lastComplete];
+                                    ctx.lineTo(lastPoint.x, lastPoint.y);
+                                }
+                            }
+                        }
+
+                        ctx.stroke();
+                    }
+
+                    // Draw data points and labels for completed points only
+                    ctx.fillStyle = '#3498db';
+                    for (let i = 0; i < pointsToShow; i++) {
+                        const point = chartDataGlobal[i];
+                        const x = padding + ((point.chart - minChart) / chartRange) * chartWidth;
+                        const y = padding + ((point.position - minPos) / posRange) * chartHeight;
+
+                        // Draw circle for data point
+                        ctx.beginPath();
+                        ctx.arc(x, y, 4, 0, 2 * Math.PI);
+                        ctx.fill();
+
+                        // Show position label above the point (bigger font size)
+                        ctx.fillStyle = '#333';
+                        ctx.font = 'bold 14px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(`#${point.position}`, x, y - 12);
+                        ctx.fillStyle = '#3498db';
+
+                        // Highlight #1 positions
+                        if (point.position === 1) {
+                            ctx.strokeStyle = '#f39c12';
+                            ctx.lineWidth = 2;
+                            ctx.beginPath();
+                            ctx.arc(x, y, 7, 0, 2 * Math.PI);
+                            ctx.stroke();
+                            ctx.strokeStyle = '#3498db';
+                            ctx.lineWidth = 2.5;
+                        }
+                    }
                 }
-            };
 
-            canvas_elem.onmouseleave = function() {
-                hideTooltip();
-                canvas_elem.style.cursor = 'default';
-            };
+                // Continue animation if not complete
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                }
+            }
+
+            // Start animation
+            animate();
         }
 
-        // Show tooltip on data point
-        function showTooltip(e, point) {
-            const tooltip = document.getElementById('tooltipContainer');
-            tooltip.innerHTML = `<div class="tooltip">Chart ${point.chart}: <strong>#${point.position}</strong></div>`;
-            tooltip.style.display = 'block';
-            tooltip.style.left = e.clientX + 'px';
-            tooltip.style.top = (e.clientY - 30) + 'px';
-        }
-
-        // Hide tooltip
-        function hideTooltip() {
-            document.getElementById('tooltipContainer').style.display = 'none';
-        }
-
-        // Load comments for the song
+        // Load comments for the song with pagination
         async function loadComments() {
             try {
                 const response = await fetch(`/api/comments/${encodeURIComponent(songTitle)}`);
                 const data = await response.json();
 
-                const commentsList = document.getElementById('commentsList');
-                commentsList.innerHTML = '';
-
-                if (data.comments.length === 0) {
-                    commentsList.innerHTML = '<p class="no-comments">No comments yet. Be the first to comment!</p>';
-                    return;
-                }
-
-                // Sort by date (newest first)
-                data.comments.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-                data.comments.forEach(comment => {
-                    const commentDiv = document.createElement('div');
-                    commentDiv.className = 'comment-item';
-
-                    const date = new Date(comment.timestamp);
-                    const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-
-                    let authorHTML = `<strong class="comment-author">${escapeHtml(comment.user)}</strong>`;
-                    
-                    // Add profile pic if available
-                    if (comment.profile_pic) {
-                        authorHTML = `<img src="${comment.profile_pic}" alt="${comment.user}" class="comment-profile-pic"> ` + authorHTML;
-                    }
-
-                    commentDiv.innerHTML = `
-                        <div class="comment-header">
-                            <div class="comment-author-info">
-                                ${authorHTML}
-                            </div>
-                            <span class="comment-date">${dateStr}</span>
-                        </div>
-                        <div class="comment-text">${escapeHtml(comment.text)}</div>
-                    `;
-
-                    commentsList.appendChild(commentDiv);
-                });
+                allComments = data.comments;
+                displayComments();
 
             } catch (error) {
                 console.error('Failed to load comments:', error);
+            }
+        }
+
+        // Display comments with pagination
+        function displayComments() {
+            const commentsList = document.getElementById('commentsList');
+            const pagination = document.getElementById('commentsPagination');
+            
+            if (allComments.length === 0) {
+                commentsList.innerHTML = '<p class="no-comments">No comments yet. Be the first to comment!</p>';
+                pagination.style.display = 'none';
+                return;
+            }
+
+            // Calculate pagination
+            const totalPages = Math.ceil(allComments.length / commentsPerPage);
+            const startIndex = (currentPage - 1) * commentsPerPage;
+            const endIndex = startIndex + commentsPerPage;
+            const commentsToShow = allComments.slice(startIndex, endIndex);
+
+            // Clear comments list
+            commentsList.innerHTML = '';
+
+            // Sort by date (newest first)
+            commentsToShow.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            commentsToShow.forEach(comment => {
+                const commentDiv = document.createElement('div');
+                commentDiv.className = 'comment-item';
+                commentDiv.id = `comment-${comment.id}`;
+
+                const date = new Date(comment.timestamp);
+                const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+
+                let authorHTML = `<strong class="comment-author">${escapeHtml(comment.user)}</strong>`;
+                
+                // Add profile pic if available
+                if (comment.profile_pic) {
+                    authorHTML = `<img src="${comment.profile_pic}" alt="${comment.user}" class="comment-profile-pic"> ` + authorHTML;
+                }
+
+                // Add edit/delete buttons if user owns comment or is admin
+                let actionsHTML = '';
+                if (currentUser && (currentUser === comment.user || isAdmin)) {
+                    actionsHTML = `
+                        <div class="comment-actions">
+                            <button class="edit-btn" onclick="startEdit(${comment.id})">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            ${isAdmin ? `<button class="delete-btn" onclick="deleteComment(${comment.id})">
+                                <i class="fas fa-trash"></i>
+                            </button>` : ''}
+                        </div>
+                    `;
+                }
+
+                // Likes section
+                const likeCount = comment.like_count || 0;
+                const likedBy = comment.liked_by || [];
+                const userLiked = likedBy.includes(currentUser);
+                const likeButtonClass = userLiked ? 'liked' : '';
+                
+                // Show max 5 names in tooltip
+                let tooltipText = '';
+                if (likedBy.length > 0) {
+                    const displayNames = likedBy.slice(0, 5);
+                    tooltipText = `Liked by: ${displayNames.join(', ')}`;
+                    if (likedBy.length > 5) {
+                        tooltipText += ` and ${likedBy.length - 5} more`;
+                    }
+                }
+                const likeTooltip = tooltipText ? `title="${tooltipText}"` : '';
+
+                const likesHTML = currentUser ? `
+                    <div class="comment-likes">
+                        <button class="like-btn ${likeButtonClass}" onclick="toggleLike(${comment.id})" ${likeTooltip}>
+                            <i class="fas fa-thumbs-up"></i>
+                            <span class="like-count">${likeCount}</span>
+                        </button>
+                    </div>
+                ` : (likeCount > 0 ? `
+                    <div class="comment-likes">
+                        <span class="like-display" ${likeTooltip}>
+                            <i class="fas fa-thumbs-up"></i>
+                            <span class="like-count">${likeCount}</span>
+                        </span>
+                    </div>
+                ` : '');
+
+                commentDiv.innerHTML = `
+                    <div class="comment-header">
+                        <div class="comment-author-info">
+                            ${authorHTML}
+                        </div>
+                        <div class="comment-right">
+                            <span class="comment-date">${dateStr}</span>
+                            ${actionsHTML}
+                        </div>
+                    </div>
+                    <div class="comment-text" id="text-${comment.id}">${escapeHtml(comment.text)}</div>
+                    <div class="comment-edit" id="edit-${comment.id}" style="display: none;">
+                        <textarea class="edit-textarea" maxlength="200">${escapeHtml(comment.text)}</textarea>
+                        <div class="edit-actions">
+                            <button class="save-btn" onclick="saveEdit(${comment.id})">Save</button>
+                            <button class="cancel-btn" onclick="cancelEdit(${comment.id})">Cancel</button>
+                        </div>
+                    </div>
+                    ${likesHTML}
+                `;
+
+                commentsList.appendChild(commentDiv);
+            });
+
+            // Update pagination
+            if (totalPages > 1) {
+                pagination.style.display = 'flex';
+                document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+                document.getElementById('prevPage').disabled = currentPage === 1;
+                document.getElementById('nextPage').disabled = currentPage === totalPages;
+            } else {
+                pagination.style.display = 'none';
+            }
+        }
+
+        // In-place editing functions
+        function startEdit(commentId) {
+            document.getElementById(`text-${commentId}`).style.display = 'none';
+            document.getElementById(`edit-${commentId}`).style.display = 'block';
+        }
+
+        function cancelEdit(commentId) {
+            document.getElementById(`text-${commentId}`).style.display = 'block';
+            document.getElementById(`edit-${commentId}`).style.display = 'none';
+        }
+
+        async function saveEdit(commentId) {
+            const textarea = document.querySelector(`#edit-${commentId} .edit-textarea`);
+            const newText = textarea.value.trim();
+            
+            if (!newText) {
+                alert('Comment cannot be empty');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/comments/${commentId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: newText
+                    })
+                });
+
+                if (response.ok) {
+                    // Update the text display
+                    document.getElementById(`text-${commentId}`).textContent = newText;
+                    cancelEdit(commentId);
+                    // Refresh comments to get updated data
+                    loadComments();
+                } else {
+                    alert('Failed to update comment');
+                }
+            } catch (error) {
+                console.error('Failed to update comment:', error);
+                alert('Error updating comment');
+            }
+        }
+
+        // Toggle like
+        async function toggleLike(commentId) {
+            try {
+                const response = await fetch(`/api/comments/${commentId}/like`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    loadComments(); // Reload to update like counts
+                } else {
+                    alert('Failed to toggle like');
+                }
+            } catch (error) {
+                console.error('Failed to toggle like:', error);
+                alert('Error toggling like');
+            }
+        }
+
+        // Pagination handlers
+        document.getElementById('prevPage')?.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                displayComments();
+            }
+        });
+
+        document.getElementById('nextPage')?.addEventListener('click', () => {
+            const totalPages = Math.ceil(allComments.length / commentsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                displayComments();
+            }
+        });
+
+        // Delete comment (admin only)
+        async function deleteComment(commentId) {
+            if (!confirm('Are you sure you want to delete this comment?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/comments/${commentId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    loadComments();
+                } else {
+                    alert('Failed to delete comment');
+                }
+            } catch (error) {
+                console.error('Failed to delete comment:', error);
+                alert('Error deleting comment');
+            }
+        }
+
+        // Character counter
+        function updateCharCount() {
+            const textarea = document.getElementById('commentText');
+            const counter = document.getElementById('charCount');
+            if (textarea && counter) {
+                counter.textContent = textarea.value.length;
             }
         }
 
@@ -404,6 +680,13 @@
         // Submit a new comment
         document.addEventListener('DOMContentLoaded', () => {
             const submitBtn = document.getElementById('submitComment');
+            const textarea = document.getElementById('commentText');
+            
+            // Add character counter
+            if (textarea) {
+                textarea.addEventListener('input', updateCharCount);
+            }
+            
             if (submitBtn) {
                 submitBtn.addEventListener('click', async () => {
                     const name = document.getElementById('commentName').value.trim();
@@ -411,6 +694,11 @@
 
                     if (!name || !text) {
                         alert('Please fill in both name and comment');
+                        return;
+                    }
+
+                    if (text.length > 200) {
+                        alert('Comment must be 200 characters or less');
                         return;
                     }
 
@@ -429,6 +717,7 @@
 
                         if (response.ok) {
                             document.getElementById('commentText').value = '';
+                            updateCharCount();
                             loadComments();
                         } else {
                             alert('Failed to post comment');
@@ -445,5 +734,248 @@
             loadSongData();
         });
     </script>
+
+    <style>
+        .admin-badge {
+            background: #f39c12;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            margin-left: 5px;
+        }
+
+        .comments-section {
+            margin-bottom: 30px; /* Add space before footer */
+        }
+
+        .comments-list {
+            max-height: 500px; /* Limit height to prevent overlap */
+            overflow-y: auto; /* Add scrolling if needed for more than 5 comments */
+            padding-right: 10px; /* Space for scrollbar */
+        }
+
+        .comment-item {
+            margin-bottom: 20px; /* Space between comments */
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            border-left: 3px solid #3498db;
+        }
+
+        .comment-item:last-child {
+            margin-bottom: 0; /* Remove margin from last comment */
+        }
+
+        .comments-pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .pagination-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .pagination-btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .page-info {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .comment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .comment-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .comment-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .edit-btn, .delete-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .edit-btn {
+            color: #3498db;
+        }
+
+        .edit-btn:hover {
+            background: #3498db;
+            color: white;
+        }
+
+        .delete-btn {
+            color: #e74c3c;
+        }
+
+        .delete-btn:hover {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .comment-edit {
+            margin-top: 10px;
+        }
+
+        .edit-textarea {
+            width: 100%;
+            min-height: 60px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: inherit;
+            resize: vertical;
+        }
+
+        .edit-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .save-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .cancel-btn {
+            background: #95a5a6;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .comment-likes {
+            margin-top: 10px;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .like-btn, .like-display {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .like-btn:hover {
+            background: #f0f0f0;
+        }
+
+        .like-btn.liked {
+            color: #3498db;
+        }
+
+        .like-display {
+            cursor: default;
+        }
+
+        .like-count {
+            font-size: 11px;
+        }
+
+        .char-counter {
+            font-size: 12px;
+            color: #666;
+            text-align: right;
+            margin-top: 5px;
+        }
+
+        .comment-input-area {
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .song-content {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        .chart-container {
+            flex-shrink: 0; /* Prevent chart from shrinking */
+        }
+
+        /* Custom scrollbar for comments */
+        .comments-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .comments-list::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+
+        .comments-list::-webkit-scrollbar-thumb {
+            background: #bbb;
+            border-radius: 3px;
+        }
+
+        .comments-list::-webkit-scrollbar-thumb:hover {
+            background: #888;
+        }
+
+        /* Ensure proper spacing in main layout */
+        main.song-page {
+            margin-bottom: 40px;
+        }
+
+        /* Adjust comment text area to allow for longer comments */
+        .comment-text {
+            line-height: 1.4;
+            word-wrap: break-word;
+            margin-top: 8px;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .comments-list {
+                max-height: 400px;
+            }
+            
+            .comment-item {
+                margin-bottom: 15px;
+                padding: 12px;
+            }
+        }
+    </style>
 </body>
 </html>
