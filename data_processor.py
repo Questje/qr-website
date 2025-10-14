@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*- 
+
 """
 Data Processor Module
 Responsible for reading and processing the Excel/CSV chart data
