@@ -35,12 +35,8 @@ TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
 TWITCH_API_URL = 'https://api.twitch.tv/helix/users'
 
 # Get data file from command line argument or use default
-if len(sys.argv) > 1:
-    data_file = sys.argv[1]
-    print(f"📂 Using data file from argument: {data_file}")
-else:
-    data_file = "Chart.xlsx"
-    print(f"📂 Using default data file: {data_file}")
+data_file = "Chart.xlsx"
+print(f"📂 Using default data file: {data_file}")
 
 # Initialize data processor and comment manager
 processor = ChartDataProcessor(data_file)
