@@ -20,7 +20,7 @@
                 </div>
             </div>
             <div class="back-button-container">
-                <button class="back-to-charts-btn" onclick="window.location.href='/'">
+                <button class="back-to-charts-btn" onclick="goBackToChart()">
                     ← Back to Charts
                 </button>
             </div>
@@ -52,7 +52,7 @@
             <div class="song-content">
                 <div class="chart-container">
                     <h3>Chart History</h3>
-                    <canvas id="songChart" width="800" height="400"></canvas>
+                    <canvas id="songChart" width="640" height="320"></canvas>
                 </div>
 
                 <div class="comments-section">
@@ -84,7 +84,7 @@
     </div>
 
     <script>
-        const songTitle = '{{ song_title }}';
+        const songTitle = {{ song_title|tojson }};
         let chartDataGlobal = [];
         let statsGlobal = {};
         let currentUser = null;
@@ -140,6 +140,16 @@
                         <i class="fab fa-twitch"></i> Login with Twitch
                     </button>
                 `;
+            }
+        }
+
+        // Go back to the chart we came from
+        function goBackToChart() {
+            const lastChart = sessionStorage.getItem('lastChartNumber');
+            if (lastChart !== null) {
+                window.location.href = `/?chart=${lastChart}`;
+            } else {
+                window.location.href = '/';
             }
         }
 
@@ -266,11 +276,11 @@
                 ctx.fillText(`#${minPos}`, padding - 5, padding + 5);
                 ctx.fillText(`#${maxPos}`, padding - 5, canvas.height - padding + 5);
 
-                // X-axis labels (only show charts where the song appeared)
+                // X-axis labels (show all chart numbers where the song appeared)
                 ctx.textAlign = 'center';
                 chartDataGlobal.forEach((point) => {
                     const x = padding + ((point.chart - minChart) / chartRange) * chartWidth;
-                    ctx.fillText(`${point.chart}`, x, canvas.height - padding + 20);
+                    ctx.fillText(`${point.chart}`, x, canvas.height - padding + 15);
                 });
 
                 // Calculate how many points to show based on animation progress
@@ -746,33 +756,33 @@
         }
 
         .comments-section {
-            margin-bottom: 30px; /* Add space before footer */
+            margin-bottom: 20px;
         }
 
         .comments-list {
-            max-height: 500px; /* Limit height to prevent overlap */
-            overflow-y: auto; /* Add scrolling if needed for more than 5 comments */
-            padding-right: 10px; /* Space for scrollbar */
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 8px;
         }
 
         .comment-item {
-            margin-bottom: 20px; /* Space between comments */
-            padding: 15px;
+            margin-bottom: 12px;
+            padding: 10px;
             background: #f9f9f9;
-            border-radius: 8px;
+            border-radius: 6px;
             border-left: 3px solid #3498db;
         }
 
         .comment-item:last-child {
-            margin-bottom: 0; /* Remove margin from last comment */
+            margin-bottom: 0;
         }
 
         .comments-pagination {
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 10px;
-            margin-top: 20px;
+            gap: 8px;
+            margin-top: 15px;
         }
 
         .pagination-btn {
@@ -839,13 +849,13 @@
         }
 
         .comment-edit {
-            margin-top: 10px;
+            margin-top: 8px;
         }
 
         .edit-textarea {
             width: 100%;
-            min-height: 60px;
-            padding: 8px;
+            min-height: 50px;
+            padding: 6px;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-family: inherit;
@@ -854,8 +864,8 @@
 
         .edit-actions {
             display: flex;
-            gap: 10px;
-            margin-top: 10px;
+            gap: 8px;
+            margin-top: 8px;
         }
 
         .save-btn {
@@ -877,7 +887,7 @@
         }
 
         .comment-likes {
-            margin-top: 10px;
+            margin-top: 6px;
             display: flex;
             justify-content: flex-end;
         }
@@ -915,19 +925,19 @@
             font-size: 12px;
             color: #666;
             text-align: right;
-            margin-top: 5px;
+            margin-top: 3px;
         }
 
         .comment-input-area {
             flex-direction: column;
-            gap: 10px;
-            margin-bottom: 20px;
+            gap: 8px;
+            margin-bottom: 15px;
         }
 
         .song-content {
             display: flex;
             flex-direction: column;
-            gap: 30px;
+            gap: 20px;
         }
 
         .chart-container {

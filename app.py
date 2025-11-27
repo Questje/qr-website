@@ -29,7 +29,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 # Twitch OAuth configuration
 TWITCH_CLIENT_ID = os.getenv('TWITCH_CLIENT_ID')
 TWITCH_CLIENT_SECRET = os.getenv('TWITCH_CLIENT_SECRET')
-TWITCH_REDIRECT_URI = os.getenv('TWITCH_REDIRECT_URI', 'http://localhost:5001/auth/callback')
+TWITCH_REDIRECT_URI = os.getenv('TWITCH_REDIRECT_URI')
 TWITCH_AUTH_BASE_URL = 'https://id.twitch.tv/oauth2/authorize'
 TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
 TWITCH_API_URL = 'https://api.twitch.tv/helix/users'
@@ -53,13 +53,59 @@ else:
     success = False
     print("🔄 Skipping data load in reloader parent process...")
 
+def get_points_for_position(position):
+    """Calculate points for a given position using the new tiered system"""
+    if position == 1:
+        return 200
+    elif position == 2:
+        return 180
+    elif position == 3:
+        return 160
+    elif position == 4:
+        return 150
+    elif 5 <= position <= 10:
+        # 5th: 145, 6th: 140, 7th: 135, 8th: 130, 9th: 125, 10th: 120
+        return 150 - (position - 4) * 5
+    elif 11 <= position <= 20:
+        # Start at 118 (120 - 2) and go down by 2 each position
+        return 120 - (position - 10) * 2
+    elif 21 <= position <= 100:
+        # Start at 99 (100 - 1) and go down by 1 each position
+        return 100 - (position - 20) * 1
+    else:
+        return 0
+
 def calculate_total_points(song_data):
-    """Calculate total points for a song across all charts"""
+    """Calculate total points for a song across all charts using new system"""
     total_points = 0
     for position in song_data["positions"].values():
         if position is not None and position <= 100:
-            total_points += (101 - position)
+            total_points += get_points_for_position(position)
     return total_points
+
+def calculate_position_stats(song_data):
+    """Calculate position statistics (#1s, Top 3s, Top 10s)"""
+    num_ones = 0
+    num_top3 = 0
+    num_top10 = 0
+    
+    for position in song_data["positions"].values():
+        if position is not None:
+            if position == 1:
+                num_ones += 1
+                num_top3 += 1
+                num_top10 += 1
+            elif position <= 3:
+                num_top3 += 1
+                num_top10 += 1
+            elif position <= 10:
+                num_top10 += 1
+    
+    return {
+        "num_ones": num_ones,
+        "num_top3": num_top3,
+        "num_top10": num_top10
+    }
 
 def count_number_ones(song_data):
     """Count how many times a song reached #1"""
@@ -68,6 +114,14 @@ def count_number_ones(song_data):
         if position == 1:
             count += 1
     return count
+
+def get_number_one_charts(song_data):
+    """Get list of chart numbers where this song reached #1"""
+    charts = []
+    for chart_num, position in song_data["positions"].items():
+        if position == 1:
+            charts.append(chart_num)
+    return sorted(charts)
 
 def get_top_spot(song_data):
     """Get the best (lowest) position achieved by a song"""
@@ -243,6 +297,8 @@ def get_chart(chart_number):
             total_points = calculate_total_points(song)
             number_ones = count_number_ones(song)
             top_spot = get_top_spot(song)
+            position_stats = calculate_position_stats(song)
+            number_one_charts = get_number_one_charts(song)
             
             formatted_data.append({
                 "position": latest_position if latest_position else 999,
@@ -253,7 +309,9 @@ def get_chart(chart_number):
                 "movement_value": 0,
                 "total_points": total_points,
                 "number_ones": number_ones,
-                "top_spot": top_spot
+                "top_spot": top_spot,
+                "position_stats": position_stats,
+                "number_one_charts": number_one_charts
             })
         
         formatted_data.sort(key=lambda x: x["total_points"], reverse=True)
@@ -283,11 +341,16 @@ def get_chart(chart_number):
         total_points = 0
         number_ones = 0
         top_spot = None
+        position_stats = {"num_ones": 0, "num_top3": 0, "num_top10": 0}
+        number_one_charts = []
+        
         for song in processor.songs:
             if song["title"] == item["title"]:
                 total_points = calculate_total_points(song)
                 number_ones = count_number_ones(song)
                 top_spot = get_top_spot(song)
+                position_stats = calculate_position_stats(song)
+                number_one_charts = get_number_one_charts(song)
                 break
         
         movement_type = "same"
@@ -325,7 +388,9 @@ def get_chart(chart_number):
             "movement_value": movement_value,
             "total_points": total_points,
             "number_ones": number_ones,
-            "top_spot": top_spot
+            "top_spot": top_spot,
+            "position_stats": position_stats,
+            "number_one_charts": number_one_charts
         })
     
     return jsonify({

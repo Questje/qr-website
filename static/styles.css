@@ -1207,3 +1207,88 @@ th.points-column {
     padding-left: 10px;
     padding-right: 10px;
 }
+
+/* ============ POINTS TOOLTIP ============ */
+.points-tooltip {
+    position: fixed;
+    z-index: 1002;
+    background: #2c3e50;
+    color: white;
+    padding: 10px 14px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    transform: translateX(-50%);
+    animation: tooltipFadeIn 0.2s ease;
+}
+
+@keyframes tooltipFadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+.points-tooltip-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tooltip-stat {
+    font-size: 13px;
+    line-height: 1.4;
+    white-space: nowrap;
+    color: #ecf0f1;
+}
+
+.tooltip-stat strong {
+    color: #3498db;
+    font-weight: 600;
+}
+
+.points-cell {
+    cursor: help;
+}
+
+/* Add a small indicator that the cell is hoverable */
+.points-cell:hover {
+    background: rgba(52, 152, 219, 0.1);
+}
+/* ============ SORT ARROW COLORS ============ */
+.sort-arrow {
+    color: #999;
+    font-weight: normal;
+    font-size: 0.85rem;
+}
+
+.sort-arrow.asc {
+    color: #e74c3c !important;
+    font-weight: bold !important;
+    font-size: 1rem !important;
+}
+
+.sort-arrow.desc {
+    color: #2ecc71 !important;
+    font-weight: bold !important;
+    font-size: 1rem !important;
+}
+
+/* ============ NUMBER ONE LABEL TOOLTIP ============ */
+.number-one-tooltip {
+    position: fixed;
+    z-index: 1003;
+    background: #2c3e50;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    font-size: 12px;
+    white-space: nowrap;
+    animation: tooltipFadeIn 0.2s ease;
+}
