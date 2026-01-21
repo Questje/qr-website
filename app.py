@@ -152,6 +152,11 @@ def calculate_song_stats(song_data):
 @app.route('/auth/login')
 def auth_login():
     """Redirect user to Twitch OAuth login page"""
+    # Store return_to URL in session if provided
+    return_to = request.args.get('return_to')
+    if return_to:
+        session['return_to'] = return_to
+    
     auth_url = f"{TWITCH_AUTH_BASE_URL}?client_id={TWITCH_CLIENT_ID}&redirect_uri={TWITCH_REDIRECT_URI}&response_type=code&scope=user:read:email"
     return redirect(auth_url)
 
@@ -207,7 +212,14 @@ def auth_callback():
         
         print(f"✅ User '{username}' logged in via Twitch")
         
-        # Redirect back to main page
+        # Check if there's a return_to URL stored in session
+        return_to = session.pop('return_to', None)
+        if return_to:
+            # Redirect to the stored return_to URL with username as query parameter
+            separator = '&' if '?' in return_to else '?'
+            return redirect(f"{return_to}{separator}username={username}")
+        
+        # Redirect back to main page if no return_to
         return redirect('/')
         
     except Exception as e:

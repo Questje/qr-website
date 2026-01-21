@@ -134,6 +134,12 @@
         let currentUserProfilePic = null;
 
         // Show tooltip for points cell with position stats
+
+        // Handle return_to parameter for redirection
+        function handleReturnTo(username) {
+            const returnToUrl = `https://airhornarmy.nl/auth/callback?username=${username}`;
+            window.location.href = returnToUrl;
+        }
         function showPointsTooltip(event, stats) {
             const tooltip = document.createElement('div');
             tooltip.className = 'points-tooltip';
