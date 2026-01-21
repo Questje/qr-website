@@ -15,6 +15,10 @@ import requests
 from datetime import timedelta
 from functools import wraps
 from dotenv import load_dotenv
+import hmac
+import hashlib
+import base64
+from urllib.parse import quote
 
 # Load environment variables from .env file
 load_dotenv()
@@ -33,6 +37,9 @@ TWITCH_REDIRECT_URI = os.getenv('TWITCH_REDIRECT_URI')
 TWITCH_AUTH_BASE_URL = 'https://id.twitch.tv/oauth2/authorize'
 TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
 TWITCH_API_URL = 'https://api.twitch.tv/helix/users'
+
+# Shared secret for HMAC signature validation (cross-site auth security)
+OAUTH_SHARED_SECRET = os.getenv('OAUTH_KEY', 'your-secret-key-change-this')
 
 # Get data file from command line argument or use default
 data_file = "Chart.xlsx"
@@ -147,6 +154,23 @@ def calculate_song_stats(song_data):
         "worst_position": max(positions)
     }
 
+def generate_hmac_signature(username, shared_secret):
+    """Generate HMAC-SHA256 signature for secure cross-site OAuth
+    
+    Args:
+        username: The Twitch username to sign
+        shared_secret: The shared secret key (must match on both sites)
+    
+    Returns:
+        Base64-encoded HMAC-SHA256 signature
+    """
+    signature = hmac.new(
+        shared_secret.encode('utf-8'),
+        username.encode('utf-8'),
+        hashlib.sha256
+    ).digest()
+    return base64.b64encode(signature).decode('utf-8')
+
 # ============ AUTHENTICATION ROUTES ============
 
 @app.route('/auth/login')
@@ -215,9 +239,18 @@ def auth_callback():
         # Check if there's a return_to URL stored in session
         return_to = session.pop('return_to', None)
         if return_to:
-            # Redirect to the stored return_to URL with username as query parameter
+            # Generate HMAC signature for secure cross-site auth
+            signature = generate_hmac_signature(username, OAUTH_SHARED_SECRET)
+            
+            # Redirect to the stored return_to URL with username and signature as query parameters
             separator = '&' if '?' in return_to else '?'
-            return redirect(f"{return_to}{separator}username={username}")
+            redirect_url = f"{return_to}{separator}username={quote(username)}&sig={quote(signature)}"
+            
+            print(f"[OAuth] Redirecting to {return_to}")
+            print(f"[OAuth] Username: {username}")
+            print(f"[OAuth] Signature (first 20 chars): {signature[:20]}...")
+            
+            return redirect(redirect_url)
         
         # Redirect back to main page if no return_to
         return redirect('/')
